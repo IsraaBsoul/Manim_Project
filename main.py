@@ -1,3 +1,4 @@
+
 import tkinter as tk
 from tkinter import colorchooser, Toplevel, messagebox, ttk,font
 from tkinter import PhotoImage, Menu
@@ -7,7 +8,6 @@ import math
 
 from svgelements import QuadraticBezier
 
-selected_text = None
 
 selected_shape = None
 shape_id = None
@@ -28,6 +28,7 @@ shape_window = None
 add_shape_mode = False
 drawing_mode = False   #####I DIDNT USE IT IN THE SHAPES ####
 
+selected_target_shape=None
 selected_animation = None
 end_selected_animation = None
 # selected_type = None
@@ -36,6 +37,8 @@ end_speed=0
 start_time_value = 0
 end_time_value = 0
 
+selected_text = None
+start_x_text, start_y_text = None, None
 text_mode = False
 text_rectangle = None
 text_entry = None
@@ -46,7 +49,13 @@ selected_color = None
 canvas_id=None
 # List to keep track of text items and their properties
 text_items = []
-
+# Default properties
+default_font_family = "Arial"
+default_font_size = 16
+default_color = "black"
+default_bold = False
+default_italic = False
+default_underline = False
 
 undo_stack = []
 redo_stack = []
@@ -57,38 +66,35 @@ sorted_drawings = []
 page_with_time = [(1, None)]
 
 ########################################DRAWING SECTION##############################
-
 ################################################ Text functions: #########################################
-
 def start_drag(event, canvas_id):
-    global start_x, start_y
-    start_x, start_y = event.x, event.y
+    global start_x_text, start_y_text, selected_text
+    start_x_text, start_y_text = event.x, event.y
+
+    # Set the selected text to the one clicked
+    selected_text = (canvas_id, event.widget)
+
 
 def drag_text(event, canvas_id):
-    global start_x, start_y
+    global start_x_text, start_y_text
 
     # Calculate the movement
-    dx, dy = event.x - start_x, event.y - start_y
+    dx, dy = event.x - start_x_text, event.y - start_y_text
 
     # Move the text entry
     canvas.move(canvas_id, dx, dy)
 
     # Update start position
-    start_x, start_y = event.x, event.y
+    start_x_text, start_y_text = event.x, event.y
+
 
 def end_drag(event, canvas_id):
     pass  # Optional: Add any final actions needed when dragging ends
-###############################################################################
-#&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$4$$
-#new updates of adding TEXT, 24/7/24, i added text_items[]
-#added print properties function
 
 def add_text():
-    global selected_text, drawing_mode,current_page,canvas_id
-
-    #if not drawing_mode:
-        #return
+    global selected_text, selected_color, text_items
+    print("llllllll")
+    print(text_items)
 
     # Create a new text entry on the canvas
     text_entry = tk.Text(canvas, wrap=tk.WORD, height=2, width=20)
@@ -96,34 +102,50 @@ def add_text():
     text_entry.focus_set()  # Set focus to the text entry
     selected_text = (canvas_id, text_entry)
 
-    # Initialize properties for the new text entry
+    # Initialize properties for the new text entry with default values
     text_properties = {
         'id': canvas_id,
-        'font': ("Helvetica", 16),
-        'color': "black",
-        'size': 16,
+        'font': (default_font_family, default_font_size),
+        'color': default_color,  # Default color is black
+        'size': default_font_size,
         'text': "",
-        'page': current_page  # Associate text with the current page
+        'bold': default_bold,
+        'italic': default_italic,
+        'underline': default_underline,
     }
     text_items.append(text_properties)
+
+    # Set default font and color
+    text_entry.config(font=(default_font_family, default_font_size), foreground=default_color)
+
+    # Update the text field when the user modifies the text
+    def update_text_field(event):
+        text_properties['text'] = text_entry.get("1.0", tk.END).strip()
+
+    text_entry.bind("<KeyRelease>", update_text_field)
 
     # Bind events for dragging the text entry
     text_entry.bind("<ButtonPress-1>", lambda event: start_drag(event, canvas_id))
     text_entry.bind("<B1-Motion>", lambda event: drag_text(event, canvas_id))
     text_entry.bind("<ButtonRelease-1>", lambda event: end_drag(event, canvas_id))
 
-    drawing_mode = False  # Switch to text input mode
-
 def edit_text():
-    global selected_text, selected_color,canvas_id
+    global selected_text, selected_color
     if selected_text:
         canvas_id, text_entry = selected_text
 
-        # Retrieve the text properties
+        # Retrieve the text properties for the selected text
         text_properties = next(item for item in text_items if item["id"] == canvas_id)
-        current_text = text_entry.get("1.0", tk.END)
+        current_text = text_entry.get("1.0", tk.END).strip()
+        text_properties['text'] = current_text  # Update text property with the current text
         current_font = text_properties["font"]
         current_color = text_properties["color"]
+        is_bold = text_properties["bold"]
+        is_italic = text_properties["italic"]
+        is_underline = text_properties["underline"]
+
+        # Set selected color to the text's current color
+        selected_color = current_color
 
         edit_window = tk.Toplevel(root)
         edit_window.title("Edit Text Properties")
@@ -144,77 +166,78 @@ def edit_text():
         size_spinbox = tk.Spinbox(edit_window, from_=8, to=72, textvariable=size_var)
         size_spinbox.grid(row=1, column=1, padx=10, pady=5)
 
+        def update_text_properties(*args):
+            # Construct the font tuple based on the selected options
+            styles = []
+            if bold_var.get():
+                styles.append('bold')
+            if italic_var.get():
+                styles.append('italic')
+            if underline_var.get():
+                styles.append('underline')
+
+            if styles:
+                new_font = (font_var.get(), size_var.get(), ' '.join(styles))
+            else:
+                new_font = (font_var.get(), size_var.get())
+
+            text_properties['font'] = new_font
+            text_properties['size'] = size_var.get()
+            text_properties['color'] = selected_color if selected_color else current_color
+            text_entry.config(font=new_font, foreground=text_properties["color"])
+
+        # Update the text properties immediately when changes are made
+        font_var.trace("w", update_text_properties)  # Listen for changes in font family
+        size_var.trace("w", update_text_properties)  # Listen for changes in font size
+
         def choose_color():
-            global selected_color,text_items,canvas_id
+            global selected_color
             color = colorchooser.askcolor(initialcolor=current_color)[1]
             if color:
                 selected_color = color
-                # Temporarily update the color for preview
+                text_properties['color'] = color
                 text_entry.config(foreground=color)
 
         color_button = tk.Button(edit_window, text="Color", command=choose_color)
         color_button.grid(row=2, column=0, columnspan=2, padx=10, pady=5)
 
-        bold_var = tk.BooleanVar(value='bold' in current_font)
+        bold_var = tk.BooleanVar(value=is_bold)
         bold_check = tk.Checkbutton(edit_window, text="Bold", variable=bold_var)
         bold_check.grid(row=3, column=0, padx=10, pady=5)
 
-        italic_var = tk.BooleanVar(value='italic' in current_font)
+        italic_var = tk.BooleanVar(value=is_italic)
         italic_check = tk.Checkbutton(edit_window, text="Italic", variable=italic_var)
         italic_check.grid(row=3, column=1, padx=10, pady=5)
 
-        underline_var = tk.BooleanVar(value='underline' in current_font)
+        underline_var = tk.BooleanVar(value=is_underline)
         underline_check = tk.Checkbutton(edit_window, text="Underline", variable=underline_var)
         underline_check.grid(row=4, column=0, columnspan=2, padx=10, pady=5)
 
-        def apply_changes():
-            global canvas_id,text_items
+        def toggle_font_style():
+            text_properties['bold'] = bold_var.get()
+            text_properties['italic'] = italic_var.get()
+            text_properties['underline'] = underline_var.get()
+            styles = []
+            if text_properties['bold']:
+                styles.append("bold")
+            if text_properties['italic']:
+                styles.append("italic")
+            if text_properties['underline']:
+                styles.append("underline")
+            new_font = (font_var.get(), size_var.get(), ' '.join(styles) if styles else '')
+            text_properties['font'] = new_font
+            text_entry.config(font=new_font)
 
-            new_font = (font_var.get(), size_var.get())
-            if bold_var.get():
-                new_font += ('bold',)
-            if italic_var.get():
-                new_font += ('italic',)
-            if underline_var.get():
-                new_font += ('underline',)
+        bold_var.trace("w", lambda *args: toggle_font_style())
+        italic_var.trace("w", lambda *args: toggle_font_style())
+        underline_var.trace("w", lambda *args: toggle_font_style())
 
-
-            for tex in text_items:
-                if tex['id'] == canvas_id:
-                    # Update properties in the text_items list
-                    text_properties['font'] = new_font
-                    text_properties['size'] = size_var.get()
-                    text_properties['color'] = selected_color if selected_color else current_color
-                    text_properties['text'] = current_text.strip()
-
-            text_entry.config(font=new_font, foreground=text_properties["color"])
-            edit_window.destroy()
-
-            # print(";;;;;;;;;")
-            # print(text_items)
-        apply_button = tk.Button(edit_window, text="Apply Changes", command=apply_changes)
-        apply_button.grid(row=5, column=0, columnspan=2, padx=10, pady=10)
-
-
-
-# def select_text(event):
-#     print("in select_text select_text")
-#     global selected_text, drawing_mode
-#
-#     if drawing_mode:
-#         item = canvas.find_closest(event.x, event.y)
-#         tags = canvas.gettags(item)
-#         if 'text' in tags:
-#             text_widget = canvas.itemcget(item, 'window')
-#             selected_text = (item, text_widget)
-#             drawing_mode = False  # Switch to text selection mode
-#     else:
-#         edit_text()
+        # Ensure text_properties['text'] is updated with any changes made by the user
+        text_entry.bind("<KeyRelease>", update_text_properties)
 
 ###############################################################################################################
 ###############################################################################################################
 #%%%%%%%%%%%%%%%%%%% shape functions ^^^^^^^^^
-
 def canvas_clicked(event):
     global current_shape, resizing,selected_text
     if selected_text:
@@ -320,7 +343,6 @@ def select_shape(shape):
 #     else:
 #         messagebox.showerror("Error", "Please choose a shape!")
 
-
 def open_shape_window():
     global shape_window, drawing
     drawing = True
@@ -349,39 +371,28 @@ def open_shape_window():
     # cancel_button.pack(side=tk.TOP, padx=5, pady=5)
 
 def start_draw(event):
-
-    global drawing, start_x, start_y, shape_id,selected_shape,resizing,shape_width
-    # print(shape_width)
-    # print(selected_shape)
-
-    if add_shape_mode and selected_shape:  # Start drawing only if a shape is selected and add mode is enabled
+    global drawing, start_x, start_y, shape_id, selected_shape, resizing, shape_width
+    if add_shape_mode and selected_shape:
         drawing = True
         if not resizing:
             start_x = event.x
             start_y = event.y
 
-
-
 def draw_shape(event):
-
-    global drawing, shape_id, start_x, start_y, add_shape_mode,selected_shape,current_shape,resizing,shape_width
-    # print(shape_width)
-    # print("indraw_shapedraw_shape")
-    # print(selected_shape)
+    global drawing, shape_id, start_x, start_y, add_shape_mode, selected_shape, current_shape, resizing, shape_width
     if drawing and selected_shape and not resizing:
         if shape_id:
             canvas.delete(shape_id)
-        # Update start_x and start_y if they are None
         if start_x is None:
             start_x = event.x
         if start_y is None:
             start_y = event.y
-        shape_color='black'
-        shape_fill='white'
+        shape_color = 'black'
+        shape_fill = 'white'
 
         if selected_shape == "circle":
-            radius = ((event.x - start_x)**2 + (event.y - start_y)**2)**0.5
-            shape_id = canvas.create_oval(start_x-radius, start_y-radius, start_x+radius, start_y+radius, outline=shape_color, fill=shape_fill)
+            radius = ((event.x - start_x) ** 2 + (event.y - start_y) ** 2) ** 0.5
+            shape_id = canvas.create_oval(start_x - radius, start_y - radius, start_x + radius, start_y + radius, outline=shape_color, fill=shape_fill)
         elif selected_shape == "square":
             shape_id = canvas.create_rectangle(start_x, start_y, event.x, event.y, outline=shape_color, fill=shape_fill)
         elif selected_shape == "triangle":
@@ -392,103 +403,31 @@ def draw_shape(event):
         elif selected_shape == "line":
             shape_id = canvas.create_line(start_x, start_y, event.x, event.y, fill=shape_color)
         elif selected_shape == "curve":
-            # print("i am curve")
             control_x = (start_x + event.x) / 2
             control_y = (start_y + event.y) / 2 - 50
             shape_id = canvas.create_line(start_x, start_y, control_x, control_y, event.x, event.y, smooth=True, fill=shape_color)
-        # Update current_shape and draw yellow dots around it
+
         current_shape = shape_id
-        # print("lllllklklklklklklkl")
-        # print(current_shape)
-        # print(canvas.type(shape_id))
         canvas.delete("yellow_dot")
         draw_yellow_dots(canvas, current_shape)
 
-
-
-# Function to start edit mode and show edit options
-# def start_edit_mode():
-#     global edit_mode
-#     edit_mode = True
-#     # show_edit_options()
-
-# Function to show edit options for current shape
-# def show_edit_options():
-#     global edit_mode
-#     if not edit_mode:
-#         messagebox.showinfo("Information", "Enable edit mode first.")
-#         return
-#
-#     if current_shape:
-#
-#         edit_menu.post(root.winfo_pointerx(), root.winfo_pointery())
-#     else:
-#         messagebox.showinfo("Information", "Please select a shape to edit.")
-
-# def end_draw(event):
-#     global drawing, shape_id, add_shape_mode
-#     if drawing:
-#         drawing = False
-#         if shape_id:
-#             canvas.tag_bind(shape_id, '<ButtonPress-1>', on_shape_click)
-#             if edit_mode:
-#                 canvas.tag_bind(shape_id, '<B1-Motion>', resize_shape)
-#             else:
-#                 canvas.tag_bind(shape_id, '<B1-Motion>', drag_shape)
-#             undo_stack.append(shape_id)
-#             save_shape_properties()
-#         shape_id = None
-#         redo_stack.clear()
-#         # start_edit_mode()  # Automatically start edit mode after drawing a shape
-#         add_shape_mode = False  # Disable add mode after drawing one shape
 def end_draw(event):
-
-    global drawing, shape_id, add_shape_mode, current_shape, edit_mode,shape_width,shape_height,all_of_drawings
-    # print(shape_width)
-    # print("rnd drawww")
-    # print(drawing)
+    global drawing, shape_id, add_shape_mode, current_shape, edit_mode, shape_width, shape_height
     if drawing:
         drawing = False
-        # print("ppp")
-        # print(shape_id)
-        # print(current_shape)
         if shape_id:
-            # print("rnd drawww   shape_id")
-            # print(shape_id)
             canvas.tag_bind(current_shape, '<ButtonPress-1>', on_shape_click)
-            # if edit_mode:
-            #     print("rnd drawww   edit_mode")
-            #     print(edit_mode)
-            #     canvas.tag_bind(current_shape, '<B1-Motion>', resize_shape)
-            # else:
-            #     print("rnd drawww   elseee")
-            #
-            #     canvas.tag_bind(current_shape, '<B1-Motion>', drag_shape)
-
-
             undo_stack.append(shape_id)
-            current_shape = shape_id  # Set current_shape to the newly drawn shape
-            save_shape_properties()
+            current_shape = shape_id
+            save_shape_properties()  # Save the shape with the current page info
             update_width_height()
-            # save_shape_properties()
-
-            # update_all_of_drawings(current_shape, height=shape_height)
-            # update_all_of_drawings(current_shape, width=shape_width)
-            # print("in end_draw")
-            # print(shape_width)
-            # print(shape_height)
         shape_id = None
         redo_stack.clear()
         update_object_menu()
-        # start_edit_mode()  # Optionally start edit mode after drawing a shape
-        add_shape_mode = False  # Disable add mode after drawing one shape
+
+        open_target_object_menu()
+        add_shape_mode = False
         drawing = False
-        #####the hieght and width untill here are correct
-        # print("8888888888")
-        # print(all_of_drawings)
-        # shape_height = None
-        # shape_width = None
-        # current_shape=None
 
 def update_width_height():
     global shape_height,shape_width,current_shape,all_of_drawings
@@ -550,52 +489,6 @@ def update_width_height():
         shape_width = None
         shape_height = None
     # print(all_of_drawings)
-
-# def on_shape_click(event):
-#     global current_shape, start_x, start_y
-#     current_shape = canvas.find_closest(event.x, event.y)[0]
-#     start_x = event.x
-#     start_y = event.y
-# Function to draw a shape with yellow dots around it
-# def draw_yellow_dots(canvas, shape_id):
-#     bbox = canvas.bbox(shape_id)
-#     x1, y1, x2, y2 = bbox
-#
-#     if canvas.type(shape_id) == "oval":  # Circle
-#         cx = (x1 + x2) / 2
-#         cy = (y1 + y2) / 2
-#         radius = (x2 - x1) / 2
-#         dots = [
-#             (cx + radius, cy),     # Right
-#             (cx - radius, cy),     # Left
-#             (cx, cy + radius),     # Bottom
-#             (cx, cy - radius)      # Top
-#         ]
-#     elif canvas.type(shape_id) == "rectangle":  # Square or Rectangle
-#         dots = [
-#             (x1 - 5, y1 - 5),      # Top-left corner
-#             (x2 + 5, y1 - 5),      # Top-right corner
-#             (x1 - 5, y2 + 5),      # Bottom-left corner
-#             (x2 + 5, y2 + 5)       # Bottom-right corner
-#         ]
-#     elif canvas.type(shape_id) == "polygon":  # Triangle or other polygons
-#         points = canvas.coords(shape_id)
-#         dots = [
-#             (points[0] - 5, points[1] - 5, "vertex1"),  # First vertex
-#             (points[2] + 5, points[3] - 5, "vertex2"),  # Second vertex
-#             ((points[0] + points[2]) / 2, points[3] + 5, "vertex3")  # Third vertex (middle)
-#         ]
-#     elif canvas.type(shape_id) == "line":  # Line or curve
-#         dots = [
-#             (x1, y1),       # Start point
-#             (x2, y2)        # End point
-#         ]
-#     else:
-#         return  # Return if the shape type is not recognized
-#
-#     for dot in dots:
-#         canvas.create_oval(dot[0] - 2, dot[1] - 2, dot[0] + 2, dot[1] + 2, fill="yellow", tags="yellow_dot")
-
 def draw_yellow_dots(canvas, shape_id):
     coords = canvas.coords(shape_id)
 
@@ -657,6 +550,13 @@ def on_shape_click(event):
 
         # Draw yellow dots around the clicked shape
         draw_yellow_dots(canvas, current_shape)
+
+        # Identify the shape in all_of_drawings
+        for shape in all_of_drawings:
+            if shape['id'] == current_shape and shape['page'] == current_page:
+                # Call select_object with the identified shape
+                select_object(shape)
+                break  # Stop once the shape is found
 
         # Bind drag event to the shape
         canvas.tag_bind(current_shape, '<B1-Motion>', drag_shape)
@@ -725,7 +625,6 @@ def stop_resizing(event):
     resizing = False
 
 
-
 def drag_shape(event):
     global current_shape, start_x, start_y,all_of_drawings
     # print("in drag")
@@ -753,6 +652,7 @@ def get_sshape(c_shape):
 
 def change_color():
     global shape_color, edit_mode, current_shape
+
     # print("poopoopoopoo")
     # print(all_of_drawings)
     shape=get_sshape(current_shape)
@@ -774,8 +674,13 @@ def change_color():
                 canvas.itemconfig(current_shape, outline=shape_color)
                 update_all_of_drawings(current_shape, color=shape_color)
 
+            shape_color = 'black'
+
+
+
 def change_fill_color():
     global shape_fill,edit_mode,current_shape
+
     edit_mode = True
     color = colorchooser.askcolor()[1]
     if color:
@@ -785,17 +690,19 @@ def change_fill_color():
             canvas.itemconfig(current_shape, fill=shape_fill)
             update_all_of_drawings(current_shape, fill=shape_fill)
 
-def undo():
-    if undo_stack:
-        shape_id = undo_stack.pop()
-        canvas.itemconfigure(shape_id, state='hidden')
-        redo_stack.append(shape_id)
+        shape_fill='white'
 
-def redo():
-    if redo_stack:
-        shape_id = redo_stack.pop()
-        canvas.itemconfigure(shape_id, state='normal')
-        undo_stack.append(shape_id)
+# def undo():
+#     if undo_stack:
+#         shape_id = undo_stack.pop()
+#         canvas.itemconfigure(shape_id, state='hidden')
+#         redo_stack.append(shape_id)
+#
+# def redo():
+#     if redo_stack:
+#         shape_id = redo_stack.pop()
+#         canvas.itemconfigure(shape_id, state='normal')
+#         undo_stack.append(shape_id)
 
 
 
@@ -815,46 +722,6 @@ def update_all_of_drawings(shape_id, **kwargs):
             # shape['width'] = shape_width
             # shape['height'] = shape_height
 
-
-
-# def open_width_scale():
-#     global width_scale
-#     width_scale = tk.Scale(root, from_=0, to=100, orient=tk.HORIZONTAL, label="Width (%)", command=change_width)
-#     width_scale.pack(side=tk.LEFT, padx=5, pady=5)
-#
-#
-# def open_height_scale():
-#     global height_scale
-#     height_scale = tk.Scale(root, from_=0, to=100, orient=tk.HORIZONTAL, label="Height (%)", command=change_height)
-#     height_scale.pack(side=tk.LEFT, padx=5, pady=5)
-
-
-# def finish_editing():
-#     global edit_mode, width_scale, height_scale
-#     edit_mode = False
-#     if width_scale:
-#         width_scale.pack_forget()  # Remove width scale from view
-#     if height_scale:
-#         height_scale.pack_forget()  # Remove height scale from view
-# Function to finish editing mode
-#def finish_editing():
-#    global edit_mode, current_shape
-#    edit_mode = False
-#    current_shape = None
-
-# def open_rotate_scale():
-#     rotate_scale = tk.Scale(root, from_=0, to=360, orient=tk.HORIZONTAL, label='Rotate', command=rotate_shape)
-#     rotate_scale.pack(side=tk.LEFT, padx=5, pady=5)
-
-#### edit button mode  #####
-# Function to enable edit mode and show edit options
-# def start_edit_mode():
-#     global edit_mode
-#     edit_mode = True
-#     show_edit_options()
-
-
-
 def save_shape_properties():
     global all_of_drawings, current_page,shape_width,shape_height,shape_id,selected_shape,shape_color,shape_fill,selected_animation,speed_value,start_time_value,end_selected_animation,end_time_value,end_speed
 
@@ -873,134 +740,134 @@ def save_shape_properties():
             'speed': speed_value,  # Save the speed
             'start_time': start_time_value,  # Save the start time
             'end_time':end_time_value,
-            'end_speed':end_speed
+            'end_speed':end_speed,
+            'target_shape': selected_target_shape
         }
         all_of_drawings.append(shape_properties)
 
+def clear_current_page():
+    global all_of_drawings
+    # Remove all shapes associated with the current page
+    all_of_drawings = [shape for shape in all_of_drawings if shape['page'] != current_page]
+    canvas.delete("all")  # Clear the canvas
+    update_object_menu()  # Update the object menu if you have one
+    open_target_object_menu()
+def delete_shape():
+    global all_of_drawings, current_shape
+    if current_shape:
+        # Remove the shape from the canvas
+        canvas.delete(current_shape)
+
+        # Remove the yellow dots associated with the current shape
+        canvas.delete("yellow_dot")
+
+        # Remove the shape from the list of drawings
+        all_of_drawings = [shape for shape in all_of_drawings if shape['id'] != current_shape]
+
+        # Clear the current shape
+        current_shape = None
+
+        # Update the object menu if you have one
+        update_object_menu()
+        open_target_object_menu()
+# #####     PAGES     #####
+
+def clear_canvas():
+    """Clear the canvas."""
+    canvas.delete("all")
+
+
+def load_shapes():
+    """Load shapes for the current page."""
+    clear_canvas()
+    for shape in all_of_drawings:
+        if shape['page'] == current_page:
+            canvas.create_rectangle(shape['coords'], outline='black')  # Adjust this for different shapes
+
+
+def navigate_page(direction):
+    global current_page, max_page
+    save_shape_properties()  # Save current shapes before changing page
+    current_page += direction
+    if current_page < 1:
+        current_page = 1
+    elif current_page > max_page:
+        max_page += 1
+    update_page_label()
+    load_shapes()  # Load shapes for the new page
+
+def add_page():
+    global max_page, current_page
+    max_page += 1
+    current_page = max_page
+    load_shapes_for_current_page()
+    update_page_label()
+def delete_page():
+    global current_page, max_page, all_of_drawings
+
+    # Remove all shapes associated with the current page
+    all_of_drawings = [shape for shape in all_of_drawings if shape['page'] != current_page]
+
+    # Adjust page count
+    if current_page == max_page:
+        max_page -= 1
+        current_page -= 1
+    else:
+        # Update the page number of shapes on higher pages
+        for shape in all_of_drawings:
+            if shape['page'] > current_page:
+                shape['page'] -= 1
+        max_page -= 1
+
+    # If there are no pages left, reset
+    if max_page < 1:
+        max_page = 1
+        current_page = 1
+
+    load_shapes_for_current_page()
+    update_page_label()
+
 def next_page():
-    global current_page ,max_page,all_of_drawings
-    ###if drawings is not empty###
-    if all_of_drawings and current_page <= max(shape['page'] for shape in all_of_drawings):
-        # print("88")
+    global current_page, max_page
+    if current_page < max_page:
         current_page += 1
-        update_canvas()
-
-    ###if drawings is empty###
-    elif not all_of_drawings and current_page<=max_page:
-        # print("II")
-        current_page += 1
-        update_canvas()
-
-
-    elif current_page+1>max_page:
-        # print("pppp")
-        # print(current_page)
-        # print(max_page)
+        load_shapes_for_current_page()
+    else:
         messagebox.showinfo("End of Pages", "This is the last page :(")
 
-    page_label.config(text=f"Page: {current_page}")
-
+    update_page_label()
 
 def previous_page():
     global current_page
     if current_page > 1:
         current_page -= 1
-        update_canvas()
-        update_all_of_drawings_after_page_change()
+        load_shapes_for_current_page()
+
     else:
         messagebox.showinfo("Start of Pages", "This is the first page :(")
+
+    update_page_label()
+
+def update_page_label():
     page_label.config(text=f"Page: {current_page}")
-    # print("in prevrevious:")
-    # print(current_page)
-    # print(";;;")
-    # print(max_page)
 
-def draw_saved_shape(shape):
-    if shape['type'] == "circle":
-        shape_id=canvas.create_oval(shape['coords'], outline=shape['color'], fill=shape['fill'])
-    elif shape['type'] == "square":
-        shape_id=canvas.create_rectangle(shape['coords'], outline=shape['color'], fill=shape['fill'])
-    elif shape['type'] == "triangle":
-        shape_id=canvas.create_polygon(shape['coords'], outline=shape['color'], fill=shape['fill'])
-    elif shape['type'] == "line":
-        shape_id=canvas.create_line(shape['coords'], fill=shape['color'])
-    elif shape['type'] == "curve":
-        shape_id=canvas.create_line(shape['coords'], smooth=True, fill=shape['color'])
-    shape['id'] = shape_id
-    update_all_of_drawings(shape['id'],id=shape_id)
-
-def update_all_of_drawings_after_page_change():
-    global all_of_drawings
+def load_shapes_for_current_page():
+    canvas.delete("all")  # Clear the canvas
     for shape in all_of_drawings:
         if shape['page'] == current_page:
-            draw_saved_shape(shape)
+            if shape['type'] == "circle":
+                shape['id'] = canvas.create_oval(*shape['coords'], outline=shape['color'], fill=shape['fill'])
+            elif shape['type'] == "square":
+                shape['id'] = canvas.create_rectangle(*shape['coords'], outline=shape['color'], fill=shape['fill'])
+            elif shape['type'] == "triangle":
+                shape['id'] = canvas.create_polygon(*shape['coords'], outline=shape['color'], fill=shape['fill'])
+            elif shape['type'] == "line":
+                shape['id'] = canvas.create_line(*shape['coords'], fill=shape['color'])
+            elif shape['type'] == "curve":
+                shape['id'] = canvas.create_line(*shape['coords'], smooth=True, fill=shape['color'])
 
-
-def add_page():
-    global current_page, max_page, page_with_time
-    current_page += 1
-    max_page += 1
-    # Add new page with None time to page_with_time
-    page_with_time.append((current_page, None))
-
-    update_canvas()  # This will handle redrawing for the new page
-    reassign_page_numbers()
-
-
-def delete_page():
-    global current_page, all_of_drawings, max_page,page_with_time
-    # print("in deleteeee")
-    # print(current_page)
-    # print(";;;")
-    # print(max_page)
-
-    if all_of_drawings and max_page > 1 :  # Ensure at least one page remains
-        all_of_drawings = [shape for shape in all_of_drawings if shape['page'] != current_page]
-        # Remove the current page from page_with_time
-        page_with_time = [entry for entry in page_with_time if entry[0] != current_page]
-
-        reassign_page_numbers()
-        if current_page > len(set(shape['page'] for shape in all_of_drawings)):
-            current_page -= 1
-        update_canvas()
-        page_label.config(text=f"Page: {current_page}")
-        update_all_of_drawings_after_page_change()
-        max_page = max(shape['page'] for shape in all_of_drawings)
-
-    if not all_of_drawings and max_page > 1:
-        # When there are no drawings but more than one page
-        max_page -= 1
-        current_page = max_page  # Adjust current_page to the new max_page
-        page_with_time = [entry for entry in page_with_time if entry[0] <= max_page]
-
-        update_canvas()
-        page_label.config(text=f"Page: {current_page}")
-
-    else:
-        messagebox.showinfo("Delete the only page", "This is the only page")
-
-
-
-
-def update_canvas():
-    global canvas, current_page
-    canvas.delete("all")  # Clear the canvas
-    # Redraw shapes for the current page
-    update_all_of_drawings_after_page_change()
-    page_label.config(text=f"Page: {current_page}")
-
-
-def reassign_page_numbers():
-    global all_of_drawings
-    page_mapping = {}
-    new_page = 1
-    for shape in all_of_drawings:
-        old_page = shape['page']
-        if old_page not in page_mapping:
-            page_mapping[old_page] = new_page
-            new_page += 1
-        shape['page'] = page_mapping[old_page]
-
+            # Bind the shape to make it draggable
+            canvas.tag_bind(shape['id'], '<ButtonPress-1>', on_shape_click)
 
 #####################################Drawing section###########################
 #####################################Animation section###########################
@@ -1297,7 +1164,13 @@ def select_object(shape):
     end_time_entry_obj.delete(0, tk.END)
     end_time_entry_obj.insert(0, str(time_value))
 
+    anim=selected_shape['animation']
+    type_button.config(text=f"animation: {anim}")
+    update_all_of_drawings(selected_shape['id'], animation=anim)
 
+    end_anim = selected_shape['end_animation']
+    end_type_button.config(text=f"animation: {end_anim}")
+    update_all_of_drawings(selected_shape['id'], end_animation=end_anim)
 # def open_type_menu():
 #     type_menu.post(type_button.winfo_rootx(), type_button.winfo_rooty() + type_button.winfo_height())
 
@@ -1330,9 +1203,59 @@ def update_animation_button(option):
 
     plus_button_time_obj.config(state=tk.NORMAL)
     minus_button_time_obj.config(state=tk.NORMAL)
+
     # Enable the Type button and update its options based on selected animation
     # type_button.config(state=tk.NORMAL)
     # update_type_options(selected_animation)
+    # Check if the selected animation is "Transform"
+    if selected_animation == "Transform":
+        # Create "Choose Target Object" button and menu if not already created
+        if not 'target_object_button' in globals():
+            global target_object_button, target_object_menu
+            target_object_button = tk.Button(features_frame, text="Choose Target Object", relief=tk.RAISED, bd=0,
+                                             padx=5, pady=5, fg='white', bg='black')
+            target_object_button.pack(side=tk.TOP, padx=5, pady=5)
+            target_object_menu = tk.Menu(root, tearoff=0)
+
+            target_object_button.config(command=open_target_object_menu)
+    else:
+        # If another animation is selected, remove the "Choose Target Object" button if it exists
+        if 'target_object_button' in globals():
+            target_object_button.pack_forget()
+            del target_object_button
+            del target_object_menu
+
+def open_target_object_menu():
+    if 'target_object_button' in globals():
+        global selected_shape
+        # Clear the menu
+        target_object_menu.delete(0, tk.END)
+
+        # Add the shapes to the menu, excluding the selected one
+        for shape in all_of_drawings:
+            if shape['id'] != selected_shape['id']:
+                shape_name = f"{shape['type'].capitalize()}"
+                target_object_menu.add_command(label=shape_name, command=lambda s=shape: select_target_object(s))
+
+
+        # Display the menu
+        target_object_menu.post(target_object_button.winfo_rootx(), target_object_button.winfo_rooty() + target_object_button.winfo_height())
+
+def select_target_object(shape):
+    global selected_target_shape
+    selected_target_shape = shape
+    target_object_button.config(text=f"Target Object: {shape['type'].capitalize()}")
+    print(f"Selected target shape: {selected_target_shape}")
+    update_all_of_drawings(selected_shape['id'],target_shape=selected_target_shape)
+
+# def remove_target_shape(target_shape):
+#     global all_of_drawings
+#
+#     # Find the shape in the all_of_drawings array and remove it
+#     all_of_drawings = [shape for shape in all_of_drawings if shape['id'] != target_shape['id']]
+#
+#     print("Shape removed from all_of_drawings:")
+#     print(all_of_drawings)
 
 def end_open_type_menu():
     global selected_animation
@@ -1450,6 +1373,20 @@ def get_canvas_size(canvas):
     canvas.update_idletasks()
     return canvas.winfo_width(), canvas.winfo_height()
 
+import subprocess
+import os
+from manim import Scene, Ellipse, Create, Transform, FadeIn, Uncreate, config  # Adjust imports as necessary
+
+def play_video(video_path):
+    """Open the video file with the default video player."""
+    if os.name == 'nt':  # Windows
+        os.startfile(video_path)
+    elif os.name == 'posix':  # macOS or Linux
+        subprocess.call(['xdg-open', video_path])  # For Linux
+        # subprocess.call(['open', video_path])  # For macOS (use this if 'xdg-open' doesn't work)
+    else:
+        print(f"Unsupported OS: {os.name}")
+
 def create_animation():
 
     global sorted_drawings
@@ -1470,6 +1407,11 @@ def create_animation():
     Shape_anime = [drawing['animation'] for drawing in sorted_drawings]
     Shape_coords = [drawing['coords'] for drawing in sorted_drawings]
     Shape_end_speed = [drawing['end_speed'] for drawing in sorted_drawings]
+
+    Shape_end_anime=[drawing['end_animation'] for drawing in sorted_drawings]
+    Shape_target_shapes = [drawing.get('target_shape') for drawing in sorted_drawings]
+
+
     # print("ppkkppkkpp")
     # print(Shape_coords)
     print("i am in create anime")
@@ -1479,12 +1421,109 @@ def create_animation():
         def construct(self):
             self.camera.background_color = WHITE
             shapes = []
+            target_shapes = []
             i = 0
             # print(Shape_Var)
             # print("9090909090909")
             # print(Shape_end_time)
             # Create shapes based on Shape_Var
+
+            for i in range(len(Shape_target_shapes)):
+                target_shape_data = Shape_target_shapes[i]
+                if target_shape_data:
+                    canvas_width, canvas_height = get_canvas_size(canvas)
+                    manim_width, manim_height = config.frame_width, config.frame_height
+
+                    target_shape_type = target_shape_data['type']
+                    if target_shape_type == "circle":
+                        target_shape = Ellipse(width=target_shape_data['width'] * (manim_width / canvas_width),
+                                               height=target_shape_data['height'] * (manim_height / canvas_height),
+                                               color=target_shape_data['fill'], fill_opacity=1)
+                        target_shape.set_stroke(color=target_shape_data['color'])
+                        x1, y1, x2, y2 = target_shape_data['coords']
+                        x_center = (x1 + x2) / 2
+                        y_center = (y1 + y2) / 2
+                        width = abs(x2 - x1)
+                        height = abs(y2 - y1)
+                        x_manim = (x_center - canvas_width / 2) * (manim_width / canvas_width)
+                        y_manim = (canvas_height / 2 - y_center) * (manim_height / canvas_height)
+
+                        target_shape.move_to([x_manim, y_manim, 0])
+
+                    elif target_shape_type == "square":
+                        x1, y1, x2, y2 = target_shape_data['coords']
+                        x_center = (x1 + x2) / 2
+                        y_center = (y1 + y2) / 2
+                        width = abs(x2 - x1)
+                        height = abs(y2 - y1)
+                        x_manim = (x_center - canvas_width / 2) * (manim_width / canvas_width)
+                        y_manim = (canvas_height / 2 - y_center) * (manim_height / canvas_height)
+                        target_shape = Rectangle(width=width * (manim_width / canvas_width),
+                                                 height=height * (manim_height / canvas_height),
+                                                 color=target_shape_data['fill'], fill_opacity=1)
+                        target_shape.set_stroke(color=target_shape_data['color'])
+                        target_shape.move_to([x_manim, y_manim, 0])
+
+                    elif target_shape_type == "triangle":
+                        x1, y1, x2, y2, x3, y3 = target_shape_data['coords']
+                        x1_manim = (x1 - canvas_width / 2) * (manim_width / canvas_width)
+                        y1_manim = (canvas_height / 2 - y1) * (manim_height / canvas_height)
+                        x2_manim = (x2 - canvas_width / 2) * (manim_width / canvas_width)
+                        y2_manim = (canvas_height / 2 - y2) * (manim_height / canvas_height)
+                        x3_manim = (x3 - canvas_width / 2) * (manim_width / canvas_width)
+                        y3_manim = (canvas_height / 2 - y3) * (manim_height / canvas_height)
+                        target_shape = Polygon([x1_manim, y1_manim, 0],
+                                               [x2_manim, y2_manim, 0],
+                                               [x3_manim, y3_manim, 0],
+                                               color=target_shape_data['fill'], fill_opacity=1)
+                        target_shape.set_stroke(color=target_shape_data['color'])
+
+
+                    elif target_shape_type == "line":
+                        x1, y1, x2, y2 = target_shape_data['coords']
+                        x1_manim = (x1 - canvas_width / 2) * (manim_width / canvas_width)
+                        y1_manim = (canvas_height / 2 - y1) * (manim_height / canvas_height)
+                        x2_manim = (x2 - canvas_width / 2) * (manim_width / canvas_width)
+                        y2_manim = (canvas_height / 2 - y2) * (manim_height / canvas_height)
+                        target_shape = Line(start=[x1_manim, y1_manim, 0], end=[x2_manim, y2_manim, 0],
+                                            color=target_shape_data['color'])
+                    elif target_shape_type == "curve":
+                        def calculate_peak(x1, y1, x2, y2, x3, y3):
+                            """Calculate the peak of the quadratic Bézier curve if possible."""
+                            denominator = x3 - 2 * x2 + x1
+                            if denominator != 0:
+                                t = (x2 - x1) / denominator
+                                x_peak = (1 - t) ** 2 * x1 + 2 * (1 - t) * t * x2 + t ** 2 * x3
+                                y_peak = (1 - t) ** 2 * y1 + 2 * (1 - t) * t * y2 + t ** 2 * y3
+                                return x_peak, y_peak
+                            else:
+                                x_peak = (x1 + x3) / 2
+                                y_peak = (y1 + y3) / 2
+                                return x_peak, y_peak
+
+                        x1, y1, x2, y2, x3, y3 = target_shape_data['coords']
+                        x1_manim = (x1 - canvas_width / 2) * (manim_width / canvas_width)
+                        y1_manim = (canvas_height / 2 - y1) * (manim_height / canvas_height)
+                        x2_manim = (x2 - canvas_width / 2) * (manim_width / canvas_width)
+                        y2_manim = (canvas_height / 2 - y2) * (manim_height / canvas_height)
+                        x3_manim = (x3 - canvas_width / 2) * (manim_width / canvas_width)
+                        y3_manim = (canvas_height / 2 - y3) * (manim_height / canvas_height)
+                        x_peak, y_peak = calculate_peak(x1, y1, x2, y2, x3, y3)
+                        x_peak_manim = (x_peak - canvas_width / 2) * (manim_width / canvas_width)
+                        y_peak_manim = (canvas_height / 2 - y_peak) * (manim_height / canvas_height)
+                        curve = VMobject()
+                        curve.set_points_as_corners(
+                            [[x1_manim, y1_manim, 0], [x2_manim, y2_manim, 0], [x3_manim, y3_manim, 0]])
+                        curve.make_smooth()
+                        curve.set_color(target_shape_data['color'])
+                        target_shape = curve
+
+
+                    target_shapes.append(target_shape)
+
+            i = 0
             for shape_type in Shape_Var:
+
                 if shape_type == "circle":
                     # Extract width and height from stored properties
                     width = Shape_colore_Width[i]
@@ -1504,7 +1543,7 @@ def create_animation():
 
                     shape = Ellipse(width=width * (manim_width / canvas_width),
                                     height=height * (manim_height / canvas_height), color=Shape_colore_fill[i],
-                                    fill_opacity=0.5)
+                                    fill_opacity=1)
                     shape.set_stroke(color=Shape_colore_Bor[i])
                     shape.move_to([x_manim, y_manim, 0])
 
@@ -1527,7 +1566,7 @@ def create_animation():
                     y3_manim = (canvas_height / 2 - y3) * (manim_height / canvas_height)
 
                     # Create Polygon for the triangle
-                    shape = Polygon([x1_manim, y1_manim, 0],[x2_manim, y2_manim, 0],[x3_manim, y3_manim, 0],color=Shape_colore_fill[i],fill_opacity=0.5)
+                    shape = Polygon([x1_manim, y1_manim, 0],[x2_manim, y2_manim, 0],[x3_manim, y3_manim, 0],color=Shape_colore_fill[i],fill_opacity=1)
                     shape.set_stroke(color=Shape_colore_Bor[i])
                     i += 1
 
@@ -1551,7 +1590,7 @@ def create_animation():
                     # Create Rectangle in Manim with specified width and height
                     shape = Rectangle(width=width * (manim_width / canvas_width),
                                       height=height * (manim_height / canvas_height), color=Shape_colore_fill[i],
-                                      fill_opacity=0.5)
+                                      fill_opacity=1)
                     shape.set_stroke(color=Shape_colore_Bor[i])
                     shape.move_to([x_manim, y_manim, 0])
 
@@ -1630,6 +1669,8 @@ def create_animation():
 
 
                 shapes.append(shape)
+                print(";l;l;l;l;l;")
+                print(shapes)
 
             # i=0
             # # Animation sequence for each shape
@@ -1651,53 +1692,115 @@ def create_animation():
             #         self.play(FadeOut(shape), run_time=Shape_speed[i])
             #     i=i+1
             # Group shapes by their start times
+
+
+
+
             start_time_groups = {}
 
             for i, start_time in enumerate(Shape_start_time):
-                if start_time not in start_time_groups:
-                    start_time_groups[start_time] = []
-                start_time_groups[start_time].append(i)
+                if Shape_anime[i]:
+                    if start_time not in start_time_groups:
+                        start_time_groups[start_time] = []
+                    start_time_groups[start_time].append(i)
 
             # Sort start times
             sorted_start_times = sorted(start_time_groups.keys())
-
+            print(sorted_start_times)
             # Animation sequence for each group of shapes
             for idx, start_time in enumerate(sorted_start_times):
-                wait_time = start_time - sorted_start_times[idx - 1] if idx > 0 else start_time
-                self.wait(wait_time)
-                # Play animations for shapes in the same start time group
-                animations_arr = []
-                for i in start_time_groups[start_time]:
-                    if Shape_anime[i] == "Create":
-                        animations_arr.append(Create(shapes[i], run_time=Shape_speed[i]))
-                    # elif Shape_anime[i] == "Uncreate":
-                    #     animations_arr.append(Uncreate(shapes[i], run_time=Shape_speed[i]))
-                    elif Shape_anime[i] == "Grow":
-                        animations_arr.append(GrowFromCenter(shapes[i], run_time=Shape_speed[i]))
-                    elif Shape_anime[i] == "Fade In":
-                        # elif Shape_anime[i] == "FadeIn":
-                        animations_arr.append(FadeIn(shapes[i], run_time=Shape_speed[i]))
-                    # elif Shape_anime[i] == "FadeOut":
-                    #     animations_arr.append(FadeOut(shapes[i], run_time=Shape_speed[i]))
+                j=0
+                # print("9999")
+                # print(Shape_anime[i])
+                print("Shape_anime[idx]")
+                print(Shape_anime[idx])
+                if Shape_anime[idx]:
+                    wait_time = start_time - sorted_start_times[idx - 1] if idx > 0 else start_time
+                    self.wait(wait_time)
+                    # Play animations for shapes in the same start time group
+                    animations_arr = []
+                    print("start_time_groups[start_time]")
+                    print(start_time_groups[start_time])
+                    print("[start_time]")
+                    print([start_time])
+                    for i in start_time_groups[start_time]:
+                        print("Shape_anime[i] ")
+                        print(Shape_anime[i] )
+                        print(i)
+                        print(len(target_shapes))
+                        if Shape_anime[i] == "Create":
+                            animations_arr.append(Create(shapes[i], run_time=Shape_speed[i]))
 
-                # Play all animations for the current start time concurrently
-                self.play(*animations_arr)
+                        elif Shape_anime[i] == "Transform" and j<len(target_shapes):
+                            print("im here")
+                            print(shapes)
+                            print(i)
+                            print(target_shapes)
+                            animations_arr.append(Transform(shapes[i], target_shapes[j], run_time=Shape_speed[i]))
+                            j=j+1
+
+                        elif Shape_anime[i] == "Fade In":
+                            # elif Shape_anime[i] == "FadeIn":
+                            animations_arr.append(FadeIn(shapes[i], run_time=Shape_speed[i]))
+                        # elif Shape_anime[i] == "FadeOut":
+                        #     animations_arr.append(FadeOut(shapes[i], run_time=Shape_speed[i]))
+
+                    # Play all animations for the current start time concurrently
+
+
+                    # self.play(*animations_arr)
+                    print("Animations to play at time", start_time, ":", animations_arr)
+                    if animations_arr:
+                        self.play(*animations_arr)
+                    else:
+                        print("No animations to play at this start time.")
+            # # Handle end times for shapes
+            # for i, end_time in enumerate(Shape_end_time):
+            #     wait_time = end_time - Shape_start_time[i]
+            #     shape_speed = Shape_end_speed[i]
+            #     self.wait(wait_time/shape_speed)
+            #     self.play(FadeOut(shapes[i]))
+
             # Handle end times for shapes
             for i, end_time in enumerate(Shape_end_time):
-                wait_time = end_time - Shape_start_time[i]
-                shape_speed = Shape_end_speed[i]
-                self.wait(wait_time/shape_speed)
-                self.play(FadeOut(shapes[i]))
+                if Shape_end_anime[i]:
+                    wait_time = end_time - Shape_start_time[i]
+                    shape_speed = Shape_end_speed[i]
+                    self.wait(wait_time / shape_speed)
 
+                    # Determine which end animation to apply
+                    end_animation_arr = []
+                    if Shape_end_anime[i] == "Fade Out":
+                        end_animation_arr.append(FadeOut(shapes[i], run_time=shape_speed))
+                    elif Shape_end_anime[i] == "Uncreate":
+                        end_animation_arr.append(Uncreate(shapes[i], run_time=shape_speed))
+
+                    # Play the end animation for the shape
+                    # self.play(*end_animation_arr)
+                    print("End animations for shape", i, ":", end_animation_arr)
+                    if end_animation_arr:
+                        self.play(*end_animation_arr)
+                    else:
+                        print("No end animations for shape", i)
 
     if __name__ == "__main__":
         # Configure Manim to open the file after rendering
         config.video_dir = "./"
-        config.open_file = True
+        config.open_file = False  # Manim will not open the video file automatically
 
         # Render the scene
         scene = ShapeAnimation()
         scene.render()
+
+        # Construct the path to the rendered video file
+        video_file = "C:/Users/esraa/PycharmProjects/Manim_Project/FINALLL/ShapeAnimation.mp4"
+
+        # Check if the video file exists
+        if os.path.isfile(video_file):
+            # Play the video file
+            play_video(video_file)
+        else:
+            print(f"Video file not found: {video_file}")
 
 
 #####################################Animation section###########################
@@ -1769,13 +1872,13 @@ top_button_frame = tk.Frame(root, bg='black')
 top_button_frame.pack(side=tk.TOP, fill=tk.X)
 
 
-undoo_icon = tk.PhotoImage(file='undo.png')
-redoo_icon = tk.PhotoImage(file='redo.png')
-undo_button = tk.Button(top_button_frame, image=undoo_icon, text="Undo", command=undo, relief=tk.RAISED, bd=0, padx=5, pady=5, bg='black')
-undo_button.pack(side=tk.LEFT, padx=10, pady=10) # Increased pady to 10
-
-redo_button = tk.Button(top_button_frame, image=redoo_icon, text="Redo", command=redo, relief=tk.RAISED, bd=0, padx=5, pady=5, bg='black')
-redo_button.pack(side=tk.LEFT, padx=5, pady=10)  # Increased pady to 10
+# undoo_icon = tk.PhotoImage(file='undo.png')
+# redoo_icon = tk.PhotoImage(file='redo.png')
+# undo_button = tk.Button(top_button_frame, image=undoo_icon, text="Undo", command=undo, relief=tk.RAISED, bd=0, padx=5, pady=5, bg='black')
+# undo_button.pack(side=tk.LEFT, padx=10, pady=10) # Increased pady to 10
+#
+# redo_button = tk.Button(top_button_frame, image=redoo_icon, text="Redo", command=redo, relief=tk.RAISED, bd=0, padx=5, pady=5, bg='black')
+# redo_button.pack(side=tk.LEFT, padx=5, pady=10)  # Increased pady to 10
 
 # Create the Add Text button
 # Load icon image
@@ -1789,6 +1892,15 @@ edit_icon = tk.PhotoImage(file="edit_text.png")
 edit_text_button = tk.Button(top_button_frame, image=edit_icon, command=edit_text, relief=tk.RAISED, bd=0, padx=5, pady=5, bg='black')
 edit_text_button.image = edit_icon  # Keep a reference to the image
 edit_text_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+
+clear_button = tk.Button(top_button_frame,text="clear all", command=clear_current_page, relief=tk.RAISED, bd=0, padx=5, pady=5, bg='gray', fg='black')
+clear_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+
+delete_button = tk.Button(top_button_frame, text="Delete shape", command=delete_shape,relief=tk.RAISED, bd=0, padx=5, pady=5, bg='gray', fg='black')
+delete_button.pack(side=tk.LEFT, padx=10, pady=10)
+
 
 ###%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ###################################FOR Pages ####################
@@ -1824,7 +1936,7 @@ features_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)
 # animation_button.pack(side=tk.TOP, padx=5, pady=10)
 
 # Define animation options
-animation_options = ["Create","Grow","Transform","Fade In"]
+animation_options = ["Create","Transform","Fade In"]
 
 # Create Type button (initially disabled)
 type_button = tk.Button(features_frame, text="Choose animation",bd=0, relief=tk.RAISED, padx=5, pady=5, bg='black',fg='white')
@@ -1887,6 +1999,35 @@ object_button.config(command=open_object_menu)
 
 #######
 # Label for "END FEATURES"
+def toggle_end_features():
+    global selected_shape
+    if end_features_var.get() == 1:
+        # Enable all end features widgets
+        end_type_button.config(state=tk.NORMAL)
+        end_speed_entry_obj.config(state=tk.NORMAL)
+        end_plus_button_speed_obj.config(state=tk.NORMAL)
+        end_minus_button_speed_obj.config(state=tk.NORMAL)
+        end_time_entry_obj.config(state=tk.NORMAL)
+        end_plus_button_time_obj.config(state=tk.NORMAL)
+        end_minus_button_time_obj.config(state=tk.NORMAL)
+    else:
+        selected_shape['end_animation']= None
+        # Disable all end features widgets
+        end_type_button.config(state=tk.DISABLED)
+        end_speed_entry_obj.config(state=tk.DISABLED)
+        end_plus_button_speed_obj.config(state=tk.DISABLED)
+        end_minus_button_speed_obj.config(state=tk.DISABLED)
+        end_time_entry_obj.config(state=tk.DISABLED)
+        end_plus_button_time_obj.config(state=tk.DISABLED)
+        end_minus_button_time_obj.config(state=tk.DISABLED)
+
+# Checkbutton variable
+end_features_var = tk.IntVar()
+
+# "Do you want end features?" checkbutton
+toggle_checkbutton = tk.Checkbutton(right_button_frame, text="Should the shape disappear later?", variable=end_features_var, command=toggle_end_features, fg='white', bg='black', selectcolor='purple', font=('Helvetica', 10))
+toggle_checkbutton.pack(side=tk.TOP, padx=5, pady=5)
+
 end_features_label = tk.Label(right_button_frame, text="Disappearance Features", font=('Helvetica', 10, 'bold'), fg='purple', bg='black')
 end_features_label.pack(side=tk.TOP, padx=5, pady=5)
 
@@ -1903,7 +2044,7 @@ end_features_frame.pack(side=tk.TOP, padx=5, pady=5, fill=tk.BOTH, expand=True)
 end_animation_options = ["Fade Out","Uncreate"]
 
 # Create Type button (initially disabled)
-end_type_button = tk.Button(end_features_frame, text="Choose animation", relief=tk.RAISED, bd=0, padx=10, pady=5, bg='black',fg='white')
+end_type_button = tk.Button(end_features_frame, text="Choose animation", relief=tk.RAISED, bd=0, padx=10, pady=5, bg='black',fg='white',state=tk.DISABLED)
 end_type_button.pack(side=tk.TOP, padx=5, pady=5)
 
 # Create menu for Type button
@@ -1917,7 +2058,7 @@ end_speed_label_obj = tk.Label(end_object_anim_frame, text="Object-speed:", font
 end_speed_label_obj.pack(side=tk.LEFT)
 
 # Add speed entry field with customized colors
-end_speed_entry_obj = tk.Entry(end_object_anim_frame, width=5, font=('Helvetica', 11), fg='white', bg='black')
+end_speed_entry_obj = tk.Entry(end_object_anim_frame, width=5, font=('Helvetica', 11), fg='white', bg='black', state=tk.DISABLED)
 end_speed_entry_obj.insert(0, "0")  # Initial value
 end_speed_entry_obj.pack(side=tk.LEFT)
 
@@ -1940,7 +2081,7 @@ end_time_label_obj = tk.Label(end_object_anim_frame_tim, text="End-time:", font=
 end_time_label_obj.pack(side=tk.LEFT)
 
 # Add start time entry field with customized colors
-end_time_entry_obj = tk.Entry(end_object_anim_frame_tim, width=5, font=('Helvetica', 11), fg='white', bg='black')
+end_time_entry_obj = tk.Entry(end_object_anim_frame_tim, width=5, font=('Helvetica', 11), fg='white', bg='black', state=tk.DISABLED)
 end_time_entry_obj.insert(0, "0")  # Initial value
 end_time_entry_obj.pack(side=tk.LEFT)
 
@@ -1978,31 +2119,26 @@ canvas._drag_data = {"x": 0, "y": 0, "shape_id": None, "dot_id": None}
 
 # Frame to contain the navigation buttons and page label
 button_frame_p = tk.Frame(root, bg='black')
-button_frame_p.pack(side=tk.BOTTOM, fill=tk.X)
+button_frame_p.pack(fill=tk.X)
 
 left_arrow = PhotoImage(file="left_arrow.png")
 right_arrow = PhotoImage(file="right_arrow.png")
 # Previous page button
+# Previous page button
 prev_page_button = tk.Button(button_frame_p, image=left_arrow, text="Previous Page", command=previous_page, relief=tk.RAISED, bd=0, padx=10, pady=5, bg='black')
 prev_page_button.pack(side=tk.LEFT, padx=5, pady=10)
 
+# Frame for page label to center it
+label_frame = tk.Frame(button_frame_p, bg='black')
+label_frame.pack(side=tk.LEFT, expand=True)
+
 # Page label
-page_label = tk.Label(button_frame_p, text=f" Page: {current_page}", bg='black', fg='white', font=("Arial", 14))
-page_label.pack(side=tk.LEFT, fill=tk.X, padx=250, pady=10)  # Adjust padx and pady as needed
+page_label = tk.Label(label_frame, text=f" Page: {current_page}", bg='black', fg='white', font=("Arial", 14))
+page_label.pack(expand=True)
 
 # Next page button
-next_page_button = tk.Button(button_frame_p,image=right_arrow, text="Next Page", command=next_page, relief=tk.RAISED, bd=0, padx=10, pady=5, bg='black')
+next_page_button = tk.Button(button_frame_p, image=right_arrow, text="Next Page", command=next_page, relief=tk.RAISED, bd=0, padx=10, pady=5, bg='black')
 next_page_button.pack(side=tk.RIGHT, padx=5, pady=10)
-
-
-# Optionally add a grid or guides
-# for i in range(0, 800, 20):
-#     canvas.create_line(i, 0, i, 600, fill="lightgray", tags="grid")
-# for i in range(0, 600, 20):
-#     canvas.create_line(0, i, 800, i, fill="lightgray", tags="grid")
-#
-# # Consider using a different cursor when drawing shapes
-# canvas.config(cursor="dot")
 
 
 canvas.bind("<ButtonPress-1>", start_draw)
@@ -2013,3 +2149,4 @@ canvas.bind("<B3-Motion>", resize_shape)     # Right-click drag to resize
 canvas.bind("<ButtonRelease-3>", stop_resizing)
 
 root.mainloop()
+
