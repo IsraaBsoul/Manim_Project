@@ -5,6 +5,9 @@ from tkinter import PhotoImage, Menu
 from tkinter import Canvas, Entry, Toplevel, Label, OptionMenu, StringVar
 from manim import *
 import math
+import subprocess
+import os
+from manim import Scene, Ellipse, Create, Transform, FadeIn, Uncreate, config  # Adjust imports as necessary
 
 from svgelements import QuadraticBezier
 
@@ -13,10 +16,10 @@ selected_shape = None
 shape_id = None
 start_x = 0
 start_y = 0
-shape_color = 'black'
+shape_color = 'BLACK'
 shape_width = None
 shape_height = None
-shape_fill = 'white'
+shape_fill = 'WHITE'
 current_shape = None
 current_page = 1
 max_page = 1
@@ -75,7 +78,7 @@ def add_text_to_canvas():
         text = text_entry.get()
         if text:
             x, y = 100, 100
-            text_id = canvas.create_text(x, y, text=text, font=("Arial", 12), fill="black")
+            text_id = canvas.create_text(x, y, text=text, font=("Arial", 12), fill="BLACK")
             canvas.tag_bind(text_id, '<ButtonPress-1>', on_shape_click)
             canvas.tag_bind(text_id, '<B1-Motion>', drag_shape)
             global current_shape, shape_id
@@ -326,8 +329,8 @@ def draw_shape(event):
             start_x = event.x
         if start_y is None:
             start_y = event.y
-        shape_color = 'black'
-        shape_fill = 'white'
+        shape_color = 'BLACK'
+        shape_fill = 'WHITE'
 
         if selected_shape == "circle":
             radius = ((event.x - start_x) ** 2 + (event.y - start_y) ** 2) ** 0.5
@@ -498,7 +501,7 @@ def on_shape_click(event):
         draw_yellow_dots(canvas, current_shape)
 
 
-        # Identify the shape in all_of_drawings
+        # Identify the shape in all_of_drawings FOR OBJECT BUTTON
         for shape in all_of_drawings:
             if shape['id'] == current_shape and shape['page'] == current_page:
                 # Call select_object with the identified shape
@@ -629,7 +632,7 @@ def change_color():
                 canvas.itemconfig(current_shape, outline=shape_color)
                 update_all_of_drawings(current_shape, color=shape_color)
 
-            shape_color = 'black'
+            shape_color = 'BLACK'
 
 
 
@@ -650,7 +653,7 @@ def change_fill_color():
                 canvas.itemconfig(current_shape, fill=shape_fill)
                 update_all_of_drawings(current_shape, fill=shape_fill)
 
-            shape_fill='white'
+            shape_fill='WHITE'
 
 
 
@@ -1432,10 +1435,8 @@ def get_canvas_size(canvas):
     canvas.update_idletasks()
     return canvas.winfo_width(), canvas.winfo_height()
 
-import subprocess
-import os
-from manim import Scene, Ellipse, Create, Transform, FadeIn, Uncreate, config  # Adjust imports as necessary
 
+#open and play a video file using the system's default video player based on the operating system
 def play_video(video_path):
     """Open the video file with the default video player."""
     if os.name == 'nt':  # Windows
@@ -1446,9 +1447,11 @@ def play_video(video_path):
     else:
         print(f"Unsupported OS: {os.name}")
 
+
 def create_animation():
 
     global sorted_drawings
+    global manim_script
     Shape_Var =[]
 
     # Extract the 'type' from each dictionary in sorted_drawings
@@ -1485,6 +1488,15 @@ def create_animation():
             shapes = []
             target_shapes = []
 
+
+            script_lines = []
+            script_lines.insert(0, "target_shapes = []\n")
+            script_lines.append("from manim import *\n\n")
+            script_lines.append("class ShapeAnimation(Scene):\n")
+            script_lines.append("    def construct(self):\n")
+            script_lines.append("        self.camera.background_color = WHITE\n")
+            script_lines.append("        shapes = []\n")
+
             i = 0
             # print(Shape_Var)
             # print("9090909090909")
@@ -1492,6 +1504,7 @@ def create_animation():
             # Create shapes based on Shape_Var
 
             for i in range(len(Shape_target_shapes)):
+                # target_shape=None
                 target_shape_data = Shape_target_shapes[i]
                 if target_shape_data:
                     canvas_width, canvas_height = get_canvas_size(canvas)
@@ -1499,6 +1512,7 @@ def create_animation():
 
                     target_shape_type = target_shape_data['type']
                     if target_shape_type == "circle":
+
                         target_shape = Ellipse(width=target_shape_data['width'] * (manim_width / canvas_width),
                                                height=target_shape_data['height'] * (manim_height / canvas_height),
                                                color=target_shape_data['fill'], fill_opacity=1)
@@ -1512,6 +1526,18 @@ def create_animation():
                         y_manim = (canvas_height / 2 - y_center) * (manim_height / canvas_height)
 
                         target_shape.move_to([x_manim, y_manim, 0])
+
+                        script_lines.append(
+                            f"        target_shape = Ellipse(width={target_shape_data['width'] * (manim_width / canvas_width)}, height={target_shape_data['height'] * (manim_height / canvas_height)}, color='{target_shape_data['fill']}')\n")
+
+                        # Add set_fill line to the script with full opacity
+                        script_lines.append(f"        target_shape.set_fill(color='{target_shape_data['fill']}', opacity=1)\n")
+
+                        script_lines.append(f"        target_shape.set_stroke(color='{target_shape_data['color']}')\n")
+                        script_lines.append(f"        target_shape.move_to([{x_manim}, {y_manim}, 0])\n")
+
+
+
 
                     elif target_shape_type == "text":
                         # Create text objects with font size and font from the canvas
@@ -1530,6 +1556,11 @@ def create_animation():
                         y_manim = (canvas_height / 2 - y_center) * (manim_height / canvas_height)
                         target_shape.move_to([x_manim, y_manim, 0])
 
+                        script_lines.append(
+                            f"        target_shape = Text('{text_content}', font_size={font_size}, color='{target_shape_data['color']}')\n")
+                        script_lines.append(f"        target_shape.move_to([{x_manim}, {y_manim}, 0])\n")
+
+
 
                     elif target_shape_type == "square":
                         x1, y1, x2, y2 = target_shape_data['coords']
@@ -1544,6 +1575,13 @@ def create_animation():
                                                  color=target_shape_data['fill'], fill_opacity=1)
                         target_shape.set_stroke(color=target_shape_data['color'])
                         target_shape.move_to([x_manim, y_manim, 0])
+                        script_lines.append(
+                            f"        target_shape = Rectangle(width={width * (manim_width / canvas_width)}, height={height * (manim_height / canvas_height)}, color='{target_shape_data['fill']}')\n")
+                        script_lines.append(f"        target_shape.set_fill(color='{target_shape_data['fill']}', opacity=1)\n")
+
+                        script_lines.append(f"        target_shape.set_stroke(color='{target_shape_data['color']}')\n")
+                        script_lines.append(f"        target_shape.move_to([{x_manim}, {y_manim}, 0])\n")
+
 
                     elif target_shape_type == "triangle":
                         x1, y1, x2, y2, x3, y3 = target_shape_data['coords']
@@ -1559,49 +1597,71 @@ def create_animation():
                                                color=target_shape_data['fill'], fill_opacity=1)
                         target_shape.set_stroke(color=target_shape_data['color'])
 
+                        # Create Polygon for the triangle
+                        script_lines.append(
+                            f"        target_shape = Polygon([{x1_manim}, {y1_manim}, 0], [{x2_manim}, {y2_manim}, 0], [{x3_manim}, {y3_manim}, 0], color='{target_shape_data['fill']}', fill_opacity=1)\n")
+                        script_lines.append(f"        target_shape.set_fill(color='{target_shape_data['fill']}', opacity=1)\n")
+
+                        script_lines.append(f"        target_shape.set_stroke(color='{target_shape_data['color']}')\n")
+                        # script_lines.append(f"        shape.move_to([{x_manim}, {y_manim}, 0])\n")
+
+
+
 
                     elif target_shape_type == "line":
-                        x1, y1, x2, y2 = target_shape_data['coords']
-                        x1_manim = (x1 - canvas_width / 2) * (manim_width / canvas_width)
-                        y1_manim = (canvas_height / 2 - y1) * (manim_height / canvas_height)
-                        x2_manim = (x2 - canvas_width / 2) * (manim_width / canvas_width)
-                        y2_manim = (canvas_height / 2 - y2) * (manim_height / canvas_height)
-                        target_shape = Line(start=[x1_manim, y1_manim, 0], end=[x2_manim, y2_manim, 0],
-                                            color=target_shape_data['color'])
+                            x1, y1, x2, y2 = target_shape_data['coords']
+                            x1_manim = (x1 - canvas_width / 2) * (manim_width / canvas_width)
+                            y1_manim = (canvas_height / 2 - y1) * (manim_height / canvas_height)
+                            x2_manim = (x2 - canvas_width / 2) * (manim_width / canvas_width)
+                            y2_manim = (canvas_height / 2 - y2) * (manim_height / canvas_height)
+                            target_shape = Line(start=[x1_manim, y1_manim, 0], end=[x2_manim, y2_manim, 0],
+                                                color=target_shape_data['fill'])
+
+                            script_lines.append(
+                                f"        target_shape = Line(start=[{x1_manim}, {y1_manim}, 0], end=[{x2_manim}, {y2_manim}, 0], color='{target_shape_data['fill']}')\n")
+
+
                     elif target_shape_type == "curve":
-                        def calculate_peak(x1, y1, x2, y2, x3, y3):
-                            """Calculate the peak of the quadratic Bézier curve if possible."""
-                            denominator = x3 - 2 * x2 + x1
-                            if denominator != 0:
-                                t = (x2 - x1) / denominator
-                                x_peak = (1 - t) ** 2 * x1 + 2 * (1 - t) * t * x2 + t ** 2 * x3
-                                y_peak = (1 - t) ** 2 * y1 + 2 * (1 - t) * t * y2 + t ** 2 * y3
-                                return x_peak, y_peak
-                            else:
-                                x_peak = (x1 + x3) / 2
-                                y_peak = (y1 + y3) / 2
-                                return x_peak, y_peak
+                            def calculate_peak(x1, y1, x2, y2, x3, y3):
+                                """Calculate the peak of the quadratic Bézier curve if possible."""
+                                denominator = x3 - 2 * x2 + x1
+                                if denominator != 0:
+                                    t = (x2 - x1) / denominator
+                                    x_peak = (1 - t) ** 2 * x1 + 2 * (1 - t) * t * x2 + t ** 2 * x3
+                                    y_peak = (1 - t) ** 2 * y1 + 2 * (1 - t) * t * y2 + t ** 2 * y3
+                                    return x_peak, y_peak
+                                else:
+                                    x_peak = (x1 + x3) / 2
+                                    y_peak = (y1 + y3) / 2
+                                    return x_peak, y_peak
 
-                        x1, y1, x2, y2, x3, y3 = target_shape_data['coords']
-                        x1_manim = (x1 - canvas_width / 2) * (manim_width / canvas_width)
-                        y1_manim = (canvas_height / 2 - y1) * (manim_height / canvas_height)
-                        x2_manim = (x2 - canvas_width / 2) * (manim_width / canvas_width)
-                        y2_manim = (canvas_height / 2 - y2) * (manim_height / canvas_height)
-                        x3_manim = (x3 - canvas_width / 2) * (manim_width / canvas_width)
-                        y3_manim = (canvas_height / 2 - y3) * (manim_height / canvas_height)
-                        x_peak, y_peak = calculate_peak(x1, y1, x2, y2, x3, y3)
-                        x_peak_manim = (x_peak - canvas_width / 2) * (manim_width / canvas_width)
-                        y_peak_manim = (canvas_height / 2 - y_peak) * (manim_height / canvas_height)
-                        curve = VMobject()
-                        curve.set_points_as_corners(
-                            [[x1_manim, y1_manim, 0], [x2_manim, y2_manim, 0], [x3_manim, y3_manim, 0]])
-                        curve.make_smooth()
-                        curve.set_color(target_shape_data['color'])
-                        target_shape = curve
+                            x1, y1, x2, y2, x3, y3 = target_shape_data['coords']
+                            x1_manim = (x1 - canvas_width / 2) * (manim_width / canvas_width)
+                            y1_manim = (canvas_height / 2 - y1) * (manim_height / canvas_height)
+                            x2_manim = (x2 - canvas_width / 2) * (manim_width / canvas_width)
+                            y2_manim = (canvas_height / 2 - y2) * (manim_height / canvas_height)
+                            x3_manim = (x3 - canvas_width / 2) * (manim_width / canvas_width)
+                            y3_manim = (canvas_height / 2 - y3) * (manim_height / canvas_height)
+                            x_peak, y_peak = calculate_peak(x1, y1, x2, y2, x3, y3)
+                            x_peak_manim = (x_peak - canvas_width / 2) * (manim_width / canvas_width)
+                            y_peak_manim = (canvas_height / 2 - y_peak) * (manim_height / canvas_height)
+                            curve = VMobject()
+                            curve.set_points_as_corners(
+                                [[x1_manim, y1_manim, 0], [x2_manim, y2_manim, 0], [x3_manim, y3_manim, 0]])
+                            curve.make_smooth()
+                            curve.set_color(target_shape_data['fill'])
+                            target_shape = curve
 
+                            # Create a VMobject for the quadratic Bézier curve
+                            script_lines.append(f"        target_shape = VMobject()\n")
+                            script_lines.append(
+                                f"        target_shape.set_points_as_corners([[{x1_manim}, {y1_manim}, 0], [{x2_manim}, {y2_manim}, 0], [{x3_manim}, {y3_manim}, 0]])\n")
+                            script_lines.append(f"        target_shape.make_smooth()\n")
+                            script_lines.append(f"        target_shape.set_color('{target_shape_data['fill']}')\n")
 
 
                     target_shapes.append(target_shape)
+                    script_lines.append("        target_shapes.append(target_shape)\n")
 
             i = 0
             for shape_type in Shape_Var:
@@ -1628,7 +1688,14 @@ def create_animation():
                                     fill_opacity=1)
                     shape.set_stroke(color=Shape_colore_Bor[i])
                     shape.move_to([x_manim, y_manim, 0])
+                    script_lines.append(
+                        f"        shape = Ellipse(width={width * (manim_width / canvas_width)}, height={height * (manim_height / canvas_height)}, color='{Shape_colore_fill[i]}')\n")
 
+                    # Add set_fill line to the script with full opacity
+                    script_lines.append(f"        shape.set_fill(color='{Shape_colore_fill[i]}', opacity=1)\n")
+
+                    script_lines.append(f"        shape.set_stroke(color='{Shape_colore_Bor[i]}')\n")
+                    script_lines.append(f"        shape.move_to([{x_manim}, {y_manim}, 0])\n")
 
                     i = i + 1
 
@@ -1649,6 +1716,11 @@ def create_animation():
                     x_manim = (x_center - canvas_width / 2) * (manim_width / canvas_width)
                     y_manim = (canvas_height / 2 - y_center) * (manim_height / canvas_height)
                     shape.move_to([x_manim, y_manim, 0])
+                    script_lines.append(
+                        f"        shape = Text('{text_content}', font_size={font_size}, color='{Shape_colore_Bor[i]}')\n")
+                    script_lines.append(f"        shape.move_to([{x_manim}, {y_manim}, 0])\n")
+
+
                     i += 1
 
                 elif shape_type == "triangle":
@@ -1669,6 +1741,16 @@ def create_animation():
                     # Create Polygon for the triangle
                     shape = Polygon([x1_manim, y1_manim, 0],[x2_manim, y2_manim, 0],[x3_manim, y3_manim, 0],color=Shape_colore_fill[i],fill_opacity=1)
                     shape.set_stroke(color=Shape_colore_Bor[i])
+
+                    # Create Polygon for the triangle
+                    script_lines.append(
+                        f"        shape = Polygon([{x1_manim}, {y1_manim}, 0], [{x2_manim}, {y2_manim}, 0], [{x3_manim}, {y3_manim}, 0], color='{Shape_colore_fill[i]}', fill_opacity=1)\n")
+                    script_lines.append(f"        shape.set_fill(color='{Shape_colore_fill[i]}', opacity=1)\n")
+
+                    script_lines.append(f"        shape.set_stroke(color='{Shape_colore_Bor[i]}')\n")
+                    # script_lines.append(f"        shape.move_to([{x_manim}, {y_manim}, 0])\n")
+
+
                     i += 1
 
                 elif shape_type == "square":
@@ -1694,6 +1776,12 @@ def create_animation():
                                       fill_opacity=1)
                     shape.set_stroke(color=Shape_colore_Bor[i])
                     shape.move_to([x_manim, y_manim, 0])
+                    script_lines.append(
+                        f"        shape = Rectangle(width={width * (manim_width / canvas_width)}, height={height * (manim_height / canvas_height)}, color='{Shape_colore_fill[i]}')\n")
+                    script_lines.append(f"        shape.set_fill(color='{Shape_colore_fill[i]}', opacity=1)\n")
+
+                    script_lines.append(f"        shape.set_stroke(color='{Shape_colore_Bor[i]}')\n")
+                    script_lines.append(f"        shape.move_to([{x_manim}, {y_manim}, 0])\n")
 
                     i += 1
 
@@ -1711,7 +1799,12 @@ def create_animation():
                     y2_manim = (canvas_height / 2 - y2) * (manim_height / canvas_height)
 
                     # Create Line in Manim
-                    shape = Line(start=[x1_manim, y1_manim, 0], end=[x2_manim, y2_manim, 0], color=Shape_colore_Bor[i])
+                    shape = Line(start=[x1_manim, y1_manim, 0], end=[x2_manim, y2_manim, 0], color=Shape_colore_fill[i])
+
+
+                    script_lines.append(
+                        f"        shape = Line(start=[{x1_manim}, {y1_manim}, 0], end=[{x2_manim}, {y2_manim}, 0], color='{Shape_colore_fill[i]}')\n")
+
 
                     i += 1
 
@@ -1759,8 +1852,15 @@ def create_animation():
                     curve.set_points_as_corners(
                         [[x1_manim, y1_manim, 0], [x2_manim, y2_manim, 0], [x3_manim, y3_manim, 0]])
                     curve.make_smooth()
-                    curve.set_color(Shape_colore_Bor[i])
+                    curve.set_color(Shape_colore_fill[i])
                     shape = curve
+
+                    # Create a VMobject for the quadratic Bézier curve
+                    script_lines.append(f"        shape = VMobject()\n")
+                    script_lines.append(
+                        f"        shape.set_points_as_corners([[{x1_manim}, {y1_manim}, 0], [{x2_manim}, {y2_manim}, 0], [{x3_manim}, {y3_manim}, 0]])\n")
+                    script_lines.append(f"        shape.make_smooth()\n")
+                    script_lines.append(f"        shape.set_color('{Shape_colore_fill[i]}')\n")
 
                     # Optional: Add a marker for the peak
                     # peak_dot = Dot([x_peak_manim, y_peak_manim, 0], color=RED)
@@ -1770,6 +1870,7 @@ def create_animation():
 
 
                 shapes.append(shape)
+                script_lines.append("        shapes.append(shape)\n")
                 print(";l;l;l;l;l;")
                 print(shapes)
 
@@ -1823,32 +1924,57 @@ def create_animation():
                 # Wait until the current event time
                 wait_time = time - current_time
                 if wait_time > 0:
+                    script_lines.append(f"        self.wait({wait_time})\n")
                     self.wait(wait_time)
 
                 animations_arr = []
+                script_lines.insert(1, "animations_arr = []\n")
+
                 for event_type, index in events_at_time:
                     if event_type == "start":
                         if Shape_anime[index] == "Create":
                             animations_arr.append(Create(shapes[index], run_time=Shape_speed[index]))
+                            script_lines.append(
+                                f"        animations_arr.append(Create(shapes[{index}], run_time={Shape_speed[index]}))\n")
+
                         elif Shape_anime[index] == "Transform" and j < len(target_shapes):
                             animations_arr.append(
                                 Transform(shapes[index], target_shapes[j], run_time=Shape_speed[index]))
+
+                            script_lines.append(
+                                f"        animations_arr.append(Transform(shapes[{index}],target_shapes[{j}], run_time={Shape_speed[index]}))\n")
+
                             j += 1
                         elif Shape_anime[index] == "Fade In":
                             animations_arr.append(FadeIn(shapes[index], run_time=Shape_speed[index]))
+                            script_lines.append(
+                                f"        animations_arr.append(FadeIn(shapes[{index}], run_time={Shape_speed[index]}))\n")
+
 
                     elif event_type == "end":
                         shape_speed = Shape_end_speed[index]
                         if Shape_end_anime[index] == "Fade Out":
                             animations_arr.append(FadeOut(shapes[index], run_time=shape_speed))
+                            script_lines.append(
+                                f"        animations_arr.append(FadeOut(shapes[{index}], run_time={shape_speed}))\n")
+
                         elif Shape_end_anime[index] == "Uncreate":
                             animations_arr.append(Uncreate(shapes[index], run_time=shape_speed))
+                            script_lines.append(
+                                f"        animations_arr.append(Uncreate(shapes[{index}], run_time={shape_speed}))\n")
 
                 if animations_arr:
                     self.play(*animations_arr)
+                    script_lines.append(f"        self.play(*animations_arr)\n")
 
                 # Update the current time to the time of the last event processed
                 current_time = time
+
+            # Write the Manim script to a file
+            with open("ShapeAnimation_script.py", "w", encoding="utf-8") as script_file:
+                script_file.write("\n".join(script_lines))
+
+            print("Manim script has been saved to 'ShapeAnimation_script.py'")
 
             # events = []  # List to store (time, event_type, index) tuples
             #
@@ -2013,6 +2139,7 @@ def create_animation():
             play_video(video_file)
         else:
             print(f"Video file not found: {video_file}")
+
 
 
 #####################################Animation section###########################
