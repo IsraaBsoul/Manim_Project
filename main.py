@@ -1895,6 +1895,8 @@ def create_animation():
             #     i=i+1
             # Group shapes by their start times
             events = []  # List to store (time, event_type, index) tuples
+            animations_arr = []
+            script_lines.insert(1, "animations_arr = []\n")
 
             # Collect start events
             for i, start_time in enumerate(Shape_start_time):
@@ -1927,8 +1929,10 @@ def create_animation():
                     script_lines.append(f"        self.wait({wait_time})\n")
                     self.wait(wait_time)
 
-                animations_arr = []
-                script_lines.insert(1, "animations_arr = []\n")
+                animations_arr.clear()  # Clears the existing elements from the list
+                script_lines.append(
+                    "        animations_arr.clear()\n"  # Corrected line
+                )
 
                 for event_type, index in events_at_time:
                     if event_type == "start":
